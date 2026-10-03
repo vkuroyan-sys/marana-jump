@@ -215,12 +215,14 @@
   function useTrack(src, name){
     const a = new Audio(); a.loop = true; a.preload = 'auto'; a.src = src;
     a.volume = muted ? 0 : 1; track = a; $('trackName').textContent = '♪ ' + name; // сразу, без ожидания canplay (важно для iPhone)
-    a.addEventListener('error', () => { if (track === a) { track = null; $('trackName').textContent = ''; } }, {once: true});
+    a.addEventListener('error', () => { // файла нет — возвращаемся к встроенной мелодии
+      if (track !== a) return;
+      track = null; $('trackName').textContent = '';
+      if (state === 'play') musicStart(false);
+    }, {once: true});
   }
-  // sirtaki.mp3 рядом с игрой: проверяем, что файл есть, и подключаем
-  if (location.protocol.startsWith('http')) {
-    fetch(MUSIC_FILE, {method: 'HEAD', cache: 'no-store'}).then(r => { if (r.ok && !track) useTrack(MUSIC_FILE + '?v=' + Date.now(), 'сиртаки'); }).catch(()=>{});
-  }
+  // sirtaki.mp3 рядом с игрой подключается сразу (без ожидания проверки — чтобы не успела включиться старая мелодия)
+  if (location.protocol.startsWith('http')) useTrack(MUSIC_FILE, 'сиртаки');
   // сохранённый ранее трек игрока
   function idb(){ return new Promise((res, rej) => { const r = indexedDB.open('maranaJump', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = rej; }); }
   try { idb().then(db => { const q = db.transaction('kv').objectStore('kv').get('track'); q.onsuccess = () => { if (q.result) useTrack(URL.createObjectURL(q.result.blob), q.result.name); }; }).catch(()=>{}); } catch(e){}
@@ -233,7 +235,11 @@
   function trackRate(){ if (track) track.playbackRate = 1 + Math.min(1, (score || 0) / 7000) * 0.25; } // сиртаки разгоняется
 
   function musicStart(reset){
-    if (track) { if (reset) track.currentTime = 0; trackRate(); track.play().catch(()=>{}); return; }
+    if (track) {
+      clearInterval(music.timer); music.timer = null;
+      if (reset) { try { track.currentTime = 0; } catch(e){} }
+      trackRate(); track.play().catch(()=>{}); return;
+    }
     if (!audio()) return;
     if (reset) music.step = 0;
     music.next = ac.currentTime + 0.08;
