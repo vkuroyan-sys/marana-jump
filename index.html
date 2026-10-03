@@ -214,9 +214,13 @@
   let track = null;
   function useTrack(src, name){
     const a = new Audio(); a.loop = true; a.preload = 'auto'; a.src = src;
-    a.addEventListener('canplay', () => { track = a; a.volume = muted ? 0 : 1; $('trackName').textContent = '♪ ' + name; }, {once: true});
+    a.volume = muted ? 0 : 1; track = a; $('trackName').textContent = '♪ ' + name; // сразу, без ожидания canplay (важно для iPhone)
+    a.addEventListener('error', () => { if (track === a) { track = null; $('trackName').textContent = ''; } }, {once: true});
   }
-  if (location.protocol.startsWith('http')) useTrack(MUSIC_FILE, 'сиртаки');
+  // sirtaki.mp3 рядом с игрой: проверяем, что файл есть, и подключаем
+  if (location.protocol.startsWith('http')) {
+    fetch(MUSIC_FILE, {method: 'HEAD', cache: 'no-store'}).then(r => { if (r.ok && !track) useTrack(MUSIC_FILE + '?v=' + Date.now(), 'сиртаки'); }).catch(()=>{});
+  }
   // сохранённый ранее трек игрока
   function idb(){ return new Promise((res, rej) => { const r = indexedDB.open('maranaJump', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = rej; }); }
   try { idb().then(db => { const q = db.transaction('kv').objectStore('kv').get('track'); q.onsuccess = () => { if (q.result) useTrack(URL.createObjectURL(q.result.blob), q.result.name); }; }).catch(()=>{}); } catch(e){}
